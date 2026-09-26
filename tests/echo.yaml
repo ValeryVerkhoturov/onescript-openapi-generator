@@ -1,0 +1,77 @@
+openapi: 3.0.3
+info:
+  title: Эхо-сервис
+  version: 1.0.0
+  description: Спецификация для сквозной проверки сгенерированного клиента.
+servers:
+- url: http://127.0.0.1:8731
+tags:
+- name: Эхо
+  description: Методы, возвращающие описание полученного запроса.
+paths:
+  /echo:
+    get:
+      operationId: echoGet
+      tags: [Эхо]
+      summary: Вернуть описание GET-запроса
+      parameters:
+      - name: limit
+        in: query
+        required: true
+        schema: {type: integer}
+        description: Обязательный параметр строки запроса
+      - name: q
+        in: query
+        required: false
+        schema: {type: string}
+        description: Необязательный параметр строки запроса
+      - name: X-Trace
+        in: header
+        required: false
+        schema: {type: string}
+        description: Необязательный заголовок
+      responses:
+        '200': {description: Успешно}
+    post:
+      operationId: echoPost
+      tags: [Эхо]
+      summary: Вернуть описание POST-запроса
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Pet'}
+      responses:
+        '200': {description: Успешно}
+  /echo/{segment}:
+    get:
+      operationId: echoSegment
+      tags: [Эхо]
+      summary: Вернуть описание запроса с параметром пути
+      parameters:
+      - name: segment
+        in: path
+        required: true
+        schema: {type: string}
+        description: Значение, подставляемое в путь
+      responses:
+        '200': {description: Успешно}
+  /fail:
+    get:
+      operationId: echoFail
+      tags: [Эхо]
+      summary: Всегда отвечать кодом 404
+      responses:
+        '404': {description: Не найдено}
+components:
+  schemas:
+    Pet:
+      type: object
+      description: Питомец.
+      properties:
+        id: {type: string, description: Идентификатор}
+        name: {type: string, description: Кличка}
+        tags:
+          type: array
+          items: {type: string}
+          description: Метки

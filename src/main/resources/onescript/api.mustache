@@ -1,0 +1,41 @@
+{{#osClassDoc}}{{{.}}}
+{{/osClassDoc}}//
+// Класс сформирован автоматически ({{generatorName}}) из спецификации OpenAPI.
+// Правки будут потеряны при следующей генерации.
+//
+// Пример:
+//   Настройки = Новый Конфигурация();
+//   Настройки.УстановитьТокен("...");
+//   Клиент = Новый {{classname}}(Настройки);
+
+Перем Настройки Экспорт;
+Перем Транспорт Экспорт;
+
+Процедура ПриСозданииОбъекта(Знач ВходящиеНастройки)
+	Настройки = ВходящиеНастройки;
+	Транспорт = Новый ТранспортHTTP(Настройки);
+КонецПроцедуры
+{{#operations}}{{#operation}}
+{{#vendorExtensions.x-os-doc}}{{{.}}}
+{{/vendorExtensions.x-os-doc}}
+Функция {{operationId}}({{{vendorExtensions.x-os-signature}}}) Экспорт
+
+	ПараметрыЗапроса = Новый Соответствие;
+{{#vendorExtensions.x-os-required-query}}	ПараметрыЗапроса.Вставить("{{baseName}}", {{paramName}});
+{{/vendorExtensions.x-os-required-query}}	Заголовки = Новый Соответствие;
+{{#vendorExtensions.x-os-required-header}}	Заголовки.Вставить("{{baseName}}", {{paramName}});
+{{/vendorExtensions.x-os-required-header}}{{#vendorExtensions.x-os-has-optional}}
+	ИменаЗаголовков = Новый Массив;
+{{#vendorExtensions.x-os-optional-header}}	ИменаЗаголовков.Добавить("{{baseName}}");
+{{/vendorExtensions.x-os-optional-header}}	Транспорт.РазложитьПараметры(ДопПараметры, ИменаЗаголовков, ПараметрыЗапроса, Заголовки);
+{{/vendorExtensions.x-os-has-optional}}
+	Возврат Транспорт.ВыполнитьЗапрос(
+		"{{httpMethod}}",
+		{{{vendorExtensions.x-os-path-template}}},
+		ПараметрыЗапроса,
+		Заголовки,
+		{{#bodyParam}}Тело{{/bodyParam}}{{^bodyParam}}Неопределено{{/bodyParam}},
+		"{{{vendorExtensions.x-os-base-url}}}");
+
+КонецФункции
+{{/operation}}{{/operations}}

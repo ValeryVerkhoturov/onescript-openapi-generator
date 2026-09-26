@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  ONESCRIPT_VERSION: "2.2.0"
+  OPENAPI_GENERATOR_VERSION: "v7.10.0"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: "17"
+        cache: maven
+
+    - name: Build plugin
+      run: mvn -B package
+
+    - name: Install OneScript
+      run: |
+        curl -fsSL -o onescript.zip \
+          "https://github.com/EvilBeaver/OneScript/releases/download/v${ONESCRIPT_VERSION}/OneScript-${ONESCRIPT_VERSION}-linux-x64.zip"
+        unzip -q onescript.zip -d "${HOME}/onescript"
+        chmod +x "${HOME}/onescript/bin/oscript"
+        echo "OSCRIPT=${HOME}/onescript/bin/oscript" >> "${GITHUB_ENV}"
+        "${HOME}/onescript/bin/oscript" -version
+
+    - name: Generate example client
+      run: scripts/generate.sh examples/petstore.yaml out/petstore packageName=petstore-client packageVersion=1.0.0
+
+    - name: Compile-check generated sources
+      run: scripts/check.sh out/petstore
+
+    - name: End-to-end test
+      run: scripts/smoke.sh

@@ -1,0 +1,104 @@
+openapi: 3.0.3
+info:
+  title: Зоомагазин
+  version: 1.0.0
+  description: |-
+    Небольшая спецификация для проверки генератора.
+
+    Она намеренно содержит то, на чём генератор может споткнуться:
+    кириллические теги, многострочные описания, параметр пути,
+    необязательные параметры и тело запроса.
+servers:
+- url: https://example.test/api
+tags:
+- name: Питомцы
+  description: |-
+    Операции над питомцами.
+
+    Тег назван по-русски, чтобы проверить сохранение кириллицы в именах классов.
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      tags: [Питомцы]
+      summary: Получить список питомцев
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema: {type: integer}
+        description: Сколько записей вернуть
+      - name: status
+        in: query
+        required: false
+        schema: {type: string, enum: [available, sold]}
+        description: Отбор по статусу
+      responses:
+        '200':
+          description: Успешно
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Pet'}
+    post:
+      operationId: createPet
+      tags: [Питомцы]
+      summary: Добавить питомца
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Pet'}
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Pet'}
+  /pets/{petId}:
+    get:
+      operationId: getPet
+      tags: [Питомцы]
+      summary: Получить питомца по идентификатору
+      parameters:
+      - name: petId
+        in: path
+        required: true
+        schema: {type: string}
+        description: Идентификатор питомца
+      responses:
+        '200':
+          description: Успешно
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Pet'}
+        '404':
+          description: Не найдено
+components:
+  schemas:
+    Pet:
+      type: object
+      description: |-
+        Питомец.
+
+        Описание намеренно многострочное — в BSL нет блочных комментариев,
+        поэтому каждая строка должна получить префикс «//».
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          description: Идентификатор
+        name:
+          type: string
+          description: Кличка
+        tag:
+          type: string
+          description: Метка
+        age:
+          type: integer
+          description: Возраст в годах
+        tags:
+          type: array
+          items: {type: string}
+          description: Произвольные метки

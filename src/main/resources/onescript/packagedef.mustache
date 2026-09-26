@@ -1,0 +1,18 @@
+////////////////////////////////////////////////////////////
+// Описание пакета для сборки и установки.
+// Файл сформирован автоматически ({{generatorName}}). Правки будут потеряны.
+//
+
+Описание.Имя("{{{packageName}}}")
+	.Версия("{{{packageVersion}}}")
+{{#packageAuthor}}	.Автор("{{{packageAuthor}}}")
+{{/packageAuthor}}{{#packageAuthorEmail}}	.АдресАвтора("{{{packageAuthorEmail}}}")
+{{/packageAuthorEmail}}	.Описание("{{{packageDescription}}}")
+	.ВерсияСреды("{{{environmentVersion}}}")
+	.ВключитьФайл("packagedef")
+	.ВключитьФайл("lib.config")
+	.ВключитьФайл("README.md")
+	.ВключитьФайл("src")
+{{#osClasses}}	.ОпределяетКласс("{{className}}", "{{classFile}}"){{^-last}}
+{{/-last}}{{#-last}};
+{{/-last}}{{/osClasses}}

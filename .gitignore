@@ -1,0 +1,6 @@
+target/
+out/
+out-smoke/
+*.ospx
+.DS_Store
+.idea/
