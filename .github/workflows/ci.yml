@@ -34,7 +34,7 @@ jobs:
         "${HOME}/onescript/bin/oscript" -version
 
     - name: Install 1connector
-      run: scripts/install-deps.sh
+      run: scripts/install-connector.sh
 
     - name: Generate example client
       run: scripts/generate.sh examples/petstore.yaml out/petstore packageName=petstore-client packageVersion=1.0.0

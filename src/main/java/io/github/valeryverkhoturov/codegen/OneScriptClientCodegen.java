@@ -1,11 +1,6 @@
 package io.github.valeryverkhoturov.codegen;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.swagger.v3.core.util.Json;
 import io.swagger.v3.oas.models.OpenAPI;
-import io.swagger.v3.oas.models.media.Schema;
 
 import org.openapitools.codegen.CliOption;
 import org.openapitools.codegen.CodegenConfig;
@@ -34,8 +29,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.LinkedHashSet;
-import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -65,7 +58,6 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
     public static final String ENVIRONMENT_VERSION = "environmentVersion";
     public static final String USER_AGENT = "userAgent";
     public static final String CONNECTOR_VERSION = "connectorVersion";
-    public static final String JSONSCHEMA_VERSION = "jsonschemaVersion";
 
     /** Directory holding API and runtime classes, relative to the package root. */
     private static final String CLASS_DIR = "src" + File.separator + "Классы";
@@ -77,16 +69,10 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
     protected String packageDescription = "Клиент API, сгенерированный из спецификации OpenAPI";
     protected String packageAuthor = "";
     protected String packageAuthorEmail = "";
-    // jsonschema requires 2.0.0, and the generated package depends on it.
-    protected String environmentVersion = "2.0.0";
+    protected String environmentVersion = "1.9.0";
     protected String userAgent = "onescript-openapi-generator";
     /** Minimum 1connector the generated transport is written against. */
     protected String connectorVersion = "2.3.3";
-    /** Minimum jsonschema the emitted model schemas are validated with. */
-    protected String jsonschemaVersion = "0.1.0";
-
-    /** Kept so model schemas can be rebuilt from the original document. */
-    private OpenAPI openAPIDocument;
 
     public OneScriptClientCodegen() {
         super();
@@ -186,8 +172,6 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
         cliOptions.add(new CliOption(USER_AGENT, "Значение заголовка User-Agent").defaultValue(userAgent));
         cliOptions.add(new CliOption(CONNECTOR_VERSION,
                 "Минимальная версия библиотеки 1connector").defaultValue(connectorVersion));
-        cliOptions.add(new CliOption(JSONSCHEMA_VERSION,
-                "Минимальная версия библиотеки jsonschema").defaultValue(jsonschemaVersion));
         cliOptions.add(CliOption.newBoolean(CodegenConstants.HIDE_GENERATION_TIMESTAMP,
                 CodegenConstants.HIDE_GENERATION_TIMESTAMP_DESC, true));
     }
@@ -219,7 +203,6 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
         environmentVersion = stringOption(ENVIRONMENT_VERSION, environmentVersion);
         userAgent = stringOption(USER_AGENT, userAgent);
         connectorVersion = stringOption(CONNECTOR_VERSION, connectorVersion);
-        jsonschemaVersion = stringOption(JSONSCHEMA_VERSION, jsonschemaVersion);
 
         additionalProperties.put(PACKAGE_NAME, packageName);
         additionalProperties.put(PACKAGE_VERSION, packageVersion);
@@ -229,7 +212,6 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
         additionalProperties.put(ENVIRONMENT_VERSION, environmentVersion);
         additionalProperties.put(USER_AGENT, userAgent);
         additionalProperties.put(CONNECTOR_VERSION, connectorVersion);
-        additionalProperties.put(JSONSCHEMA_VERSION, jsonschemaVersion);
         additionalProperties.put("generatorName", getName());
 
         supportingFiles.add(new SupportingFile("packagedef.mustache", "", "packagedef"));
@@ -413,7 +395,6 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
     @Override
     public void preprocessOpenAPI(OpenAPI openAPI) {
         super.preprocessOpenAPI(openAPI);
-        this.openAPIDocument = openAPI;
 
         String url = "";
         if (openAPI.getServers() != null && !openAPI.getServers().isEmpty()) {
@@ -511,11 +492,6 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
 
             model.vendorExtensions.put("x-os-doc",
                     buildHeaderDoc(model.classname, model.description));
-
-            String schema = buildSchemaLiteral(model.name);
-            if (schema != null) {
-                model.vendorExtensions.put("x-os-schema", schema);
-            }
         }
 
         return result;
@@ -765,114 +741,6 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
 
         result.put("osClasses", registry);
         return result;
-    }
-
-    private static final String COMPONENT_PREFIX = "#/components/schemas/";
-    private static final String DEFINITION_PREFIX = "#/definitions/";
-
-    /**
-     * Renders a model's schema as a self-contained JSON Schema draft-07 document,
-     * already escaped as a BSL string literal.
-     *
-     * <p>OpenAPI 3.0's schema object is a near-subset of draft-07, so the document is
-     * reused rather than re-derived from CodegenModel — that keeps keywords the
-     * codegen model drops (pattern, maxLength, enum on nested objects, the combinators)
-     * instead of silently validating less than the spec says.
-     *
-     * <p>Every {@code $ref} the schema reaches is copied into a local
-     * {@code definitions} block and repointed there, so a model validates without the
-     * rest of the document. Following refs by name rather than by inlining keeps
-     * recursive schemas — which WB has — from expanding forever.
-     */
-    private String buildSchemaLiteral(String modelName) {
-        if (openAPIDocument == null || openAPIDocument.getComponents() == null) {
-            return null;
-        }
-        Map<String, Schema> schemas = openAPIDocument.getComponents().getSchemas();
-        if (schemas == null || !schemas.containsKey(modelName)) {
-            return null;
-        }
-
-        ObjectMapper mapper = Json.mapper();
-        ObjectNode root = mapper.valueToTree(schemas.get(modelName));
-        clean(root);
-
-        Set<String> pending = new LinkedHashSet<>();
-        collectRefs(root, pending);
-
-        ObjectNode definitions = mapper.createObjectNode();
-        Set<String> resolved = new LinkedHashSet<>();
-        while (!pending.isEmpty()) {
-            String name = pending.iterator().next();
-            pending.remove(name);
-            if (!resolved.add(name) || !schemas.containsKey(name)) {
-                continue;
-            }
-            ObjectNode dependency = mapper.valueToTree(schemas.get(name));
-            clean(dependency);
-            collectRefs(dependency, pending);
-            pending.removeAll(resolved);
-            definitions.set(name, dependency);
-        }
-
-        if (definitions.size() > 0) {
-            root.set("definitions", definitions);
-        }
-        root.put("$schema", "http://json-schema.org/draft-07/schema#");
-
-        try {
-            return toBslLiteral(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root));
-        } catch (Exception failure) {
-            // A model without a usable schema simply gets no Проверить() — better
-            // than failing the whole generation over one unserializable subtree.
-            return null;
-        }
-    }
-
-    /** Strips swagger-serializer bookkeeping and repoints refs at the local definitions. */
-    private void clean(JsonNode node) {
-        if (node instanceof ObjectNode) {
-            ObjectNode object = (ObjectNode) node;
-            object.remove("exampleSetFlag");
-            object.remove("specVersion");
-            object.remove("types");
-
-            JsonNode ref = object.get("$ref");
-            if (ref != null && ref.isTextual() && ref.asText().startsWith(COMPONENT_PREFIX)) {
-                object.put("$ref", DEFINITION_PREFIX + ref.asText().substring(COMPONENT_PREFIX.length()));
-            }
-        }
-        for (JsonNode child : node) {
-            clean(child);
-        }
-    }
-
-    private void collectRefs(JsonNode node, Set<String> target) {
-        if (node instanceof ObjectNode) {
-            JsonNode ref = node.get("$ref");
-            if (ref != null && ref.isTextual() && ref.asText().startsWith(DEFINITION_PREFIX)) {
-                target.add(ref.asText().substring(DEFINITION_PREFIX.length()));
-            }
-        }
-        for (JsonNode child : node) {
-            collectRefs(child, target);
-        }
-    }
-
-    /**
-     * Wraps text as a BSL string literal: a double quote is escaped by doubling it,
-     * and every line after the first is continued with a leading {@code |}.
-     */
-    private String toBslLiteral(String text) {
-        String[] lines = text.replace("\r\n", "\n").replace('\r', '\n').split("\n", -1);
-        StringBuilder result = new StringBuilder("\"");
-        for (int index = 0; index < lines.length; index++) {
-            if (index > 0) {
-                result.append("\n\t\t|");
-            }
-            result.append(lines[index].replace("\"", "\"\""));
-        }
-        return result.append("\"").toString();
     }
 
     private String posix(String path) {
