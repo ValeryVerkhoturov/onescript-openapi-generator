@@ -27,11 +27,14 @@ src/Модели/
   <Схема>.os                  по одному классу на схему
 ```
 
-Единственная зависимость сгенерированного клиента —
-[1connector](https://github.com/vbondarevsky/1connector): на нём построен
-транспорт. Он собирает и кодирует строку запроса, сериализует тело в JSON,
-разбирает ответ и умеет повторять запросы, работать с прокси и SSL. `opm`
-подтянет его сам — он объявлен в `packagedef`.
+Зависимости сгенерированного клиента — две, обе объявлены в `packagedef`, так
+что `opm` подтянет их сам:
+
+- [1connector](https://github.com/vbondarevsky/1connector) — транспорт: сборка и
+  кодирование строки запроса, сериализация тела в JSON, разбор ответа, повторы,
+  прокси и SSL.
+- [jsonschema](https://github.com/yellow-hammer/jsonschema) — проверка моделей по
+  схеме draft-07, встроенной в каждый класс модели.
 
 ## Сборка
 
@@ -66,9 +69,10 @@ java -cp "onescript-openapi-generator.jar:openapi-generator-cli.jar" \
 | `packageDescription` | — | описание в `packagedef` |
 | `packageAuthor` | — | автор пакета |
 | `packageAuthorEmail` | — | адрес автора |
-| `environmentVersion` | `1.9.0` | минимальная версия OneScript |
+| `environmentVersion` | `2.0.0` | минимальная версия OneScript (её требует jsonschema) |
 | `userAgent` | `onescript-openapi-generator` | значение заголовка `User-Agent` |
 | `connectorVersion` | `2.3.3` | минимальная версия 1connector в `packagedef` |
+| `jsonschemaVersion` | `0.1.0` | минимальная версия jsonschema в `packagedef` |
 
 ## Проверка результата
 
@@ -76,13 +80,13 @@ java -cp "onescript-openapi-generator.jar:openapi-generator-cli.jar" \
 барьер, который даёт OneScript:
 
 ```bash
-OSCRIPT=/путь/к/oscript scripts/install-connector.sh   # нужен для проверки
+OSCRIPT=/путь/к/oscript scripts/install-deps.sh   # нужен для проверки
 OSCRIPT=/путь/к/oscript scripts/check.sh ./out
 ```
 
-`install-connector.sh` обязателен: `ТранспортHTTP.os` начинается с
-`#Использовать 1connector`, поэтому библиотека должна резолвиться даже для
-`oscript -check`.
+`install-deps.sh` обязателен: `ТранспортHTTP.os` и каждая модель начинаются с
+`#Использовать`, поэтому библиотеки должны резолвиться даже для `oscript -check`,
+а не только при запуске.
 
 ## Как решения связаны с особенностями OneScript
 
