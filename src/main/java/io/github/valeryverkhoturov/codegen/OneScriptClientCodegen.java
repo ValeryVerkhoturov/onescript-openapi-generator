@@ -1,6 +1,7 @@
 package io.github.valeryverkhoturov.codegen;
 
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.media.Schema;
 
 import org.openapitools.codegen.CliOption;
 import org.openapitools.codegen.CodegenConfig;
@@ -267,6 +268,27 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
     @Override
     public String modelFileFolder() {
         return outputFolder + File.separator + MODEL_DIR;
+    }
+
+    /**
+     * Resolves a schema to the OneScript type that actually exists.
+     *
+     * <p>Without this, a {@code $ref} yields the bare schema name while the class it
+     * generates carries {@code modelNamePrefix} — so an annotation like
+     * {@code &Тип("AdvertSettings")} would name a class that was never emitted, and
+     * both jason's deserializer and validate's type check would fail on it at runtime.
+     */
+    @Override
+    public String getSchemaType(Schema schema) {
+        String openAPIType = super.getSchemaType(schema);
+
+        if (typeMapping.containsKey(openAPIType)) {
+            return typeMapping.get(openAPIType);
+        }
+        if (languageSpecificPrimitives.contains(openAPIType)) {
+            return openAPIType;
+        }
+        return toModelName(openAPIType);
     }
 
     @Override
