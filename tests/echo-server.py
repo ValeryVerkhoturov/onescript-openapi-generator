@@ -7,8 +7,12 @@ serialization can be asserted from OneScript without a network dependency.
 
 import json
 import sys
+from collections import Counter
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
+
+# Hits per path, so the test can prove a retried request really was re-sent.
+HITS = Counter()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -17,8 +21,14 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length).decode("utf-8") if length else ""
 
+        HITS[parsed.path] += 1
+
         if parsed.path == "/fail":
             status = 404
+        elif parsed.path == "/flaky":
+            # 503 until the third attempt, then 200: enough to show the
+            # transport retrying without making the test slow.
+            status = 200 if HITS[parsed.path] >= 3 else 503
         else:
             status = 200
 
@@ -30,6 +40,7 @@ class Handler(BaseHTTPRequestHandler):
             "query": parse_qs(parsed.query),
             "headers": {k.lower(): v for k, v in self.headers.items()},
             "body": body,
+            "attempt": HITS[parsed.path],
         }, ensure_ascii=False).encode("utf-8")
 
         self.send_response(status)

@@ -33,6 +33,9 @@ jobs:
         echo "OSCRIPT=${HOME}/onescript/bin/oscript" >> "${GITHUB_ENV}"
         "${HOME}/onescript/bin/oscript" -version
 
+    - name: Install 1connector
+      run: scripts/install-connector.sh
+
     - name: Generate example client
       run: scripts/generate.sh examples/petstore.yaml out/petstore packageName=petstore-client packageVersion=1.0.0
 

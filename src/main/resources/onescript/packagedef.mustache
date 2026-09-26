@@ -9,8 +9,8 @@
 {{/packageAuthor}}{{#packageAuthorEmail}}	.АдресАвтора("{{{packageAuthorEmail}}}")
 {{/packageAuthorEmail}}	.Описание("{{{packageDescription}}}")
 	.ВерсияСреды("{{{environmentVersion}}}")
+	.ЗависитОт("1connector", "{{{connectorVersion}}}")
 	.ВключитьФайл("packagedef")
-	.ВключитьФайл("lib.config")
 	.ВключитьФайл("README.md")
 	.ВключитьФайл("src")
 {{#osClasses}}	.ОпределяетКласс("{{className}}", "{{classFile}}"){{^-last}}

@@ -14,6 +14,10 @@ PORT="${PORT:-8731}"
 
 cd "${REPO_ROOT}"
 
+# The generated transport is built on 1connector, so it has to be present
+# before the generated code can be compiled or run.
+./scripts/install-connector.sh
+
 rm -rf out-smoke
 ./scripts/generate.sh tests/echo.yaml out-smoke packageName=echo-client packageVersion=1.0.0
 

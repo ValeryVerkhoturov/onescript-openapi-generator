@@ -36,8 +36,9 @@ import java.util.TreeMap;
  *
  * <p>Output is a ready-to-build opm package: {@code packagedef} + {@code lib.config}
  * describing every generated class, sources under {@code src/}, and a small runtime
- * (configuration, HTTP transport, response type, secret-string wrapper)
- * that depends on nothing beyond the OneScript standard library.
+ * (configuration, HTTP transport, response type, secret-string wrapper) built on
+ * <a href="https://github.com/vbondarevsky/1connector">1connector</a>, which is
+ * declared as the package's only dependency.
  *
  * <p>Two OneScript traits shape most of the decisions here:
  * <ul>
@@ -56,6 +57,7 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
     public static final String PACKAGE_AUTHOR_EMAIL = "packageAuthorEmail";
     public static final String ENVIRONMENT_VERSION = "environmentVersion";
     public static final String USER_AGENT = "userAgent";
+    public static final String CONNECTOR_VERSION = "connectorVersion";
 
     /** Directory holding API and runtime classes, relative to the package root. */
     private static final String CLASS_DIR = "src" + File.separator + "Классы";
@@ -69,6 +71,8 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
     protected String packageAuthorEmail = "";
     protected String environmentVersion = "1.9.0";
     protected String userAgent = "onescript-openapi-generator";
+    /** Minimum 1connector the generated transport is written against. */
+    protected String connectorVersion = "2.3.3";
 
     public OneScriptClientCodegen() {
         super();
@@ -166,6 +170,8 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
         cliOptions.add(new CliOption(PACKAGE_AUTHOR_EMAIL, "Адрес автора").defaultValue(packageAuthorEmail));
         cliOptions.add(new CliOption(ENVIRONMENT_VERSION, "Минимальная версия OneScript").defaultValue(environmentVersion));
         cliOptions.add(new CliOption(USER_AGENT, "Значение заголовка User-Agent").defaultValue(userAgent));
+        cliOptions.add(new CliOption(CONNECTOR_VERSION,
+                "Минимальная версия библиотеки 1connector").defaultValue(connectorVersion));
         cliOptions.add(CliOption.newBoolean(CodegenConstants.HIDE_GENERATION_TIMESTAMP,
                 CodegenConstants.HIDE_GENERATION_TIMESTAMP_DESC, true));
     }
@@ -196,6 +202,7 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
         packageAuthorEmail = stringOption(PACKAGE_AUTHOR_EMAIL, packageAuthorEmail);
         environmentVersion = stringOption(ENVIRONMENT_VERSION, environmentVersion);
         userAgent = stringOption(USER_AGENT, userAgent);
+        connectorVersion = stringOption(CONNECTOR_VERSION, connectorVersion);
 
         additionalProperties.put(PACKAGE_NAME, packageName);
         additionalProperties.put(PACKAGE_VERSION, packageVersion);
@@ -204,6 +211,7 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
         putIfPresent(PACKAGE_AUTHOR_EMAIL, packageAuthorEmail);
         additionalProperties.put(ENVIRONMENT_VERSION, environmentVersion);
         additionalProperties.put(USER_AGENT, userAgent);
+        additionalProperties.put(CONNECTOR_VERSION, connectorVersion);
         additionalProperties.put("generatorName", getName());
 
         supportingFiles.add(new SupportingFile("packagedef.mustache", "", "packagedef"));
