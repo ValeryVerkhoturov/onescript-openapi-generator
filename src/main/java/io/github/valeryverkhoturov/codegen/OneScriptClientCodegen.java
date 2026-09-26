@@ -26,9 +26,12 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -58,6 +61,8 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
     public static final String ENVIRONMENT_VERSION = "environmentVersion";
     public static final String USER_AGENT = "userAgent";
     public static final String CONNECTOR_VERSION = "connectorVersion";
+    public static final String JASON_VERSION = "jasonVersion";
+    public static final String VALIDATE_VERSION = "validateVersion";
 
     /** Directory holding API and runtime classes, relative to the package root. */
     private static final String CLASS_DIR = "src" + File.separator + "Классы";
@@ -69,10 +74,15 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
     protected String packageDescription = "Клиент API, сгенерированный из спецификации OpenAPI";
     protected String packageAuthor = "";
     protected String packageAuthorEmail = "";
-    protected String environmentVersion = "1.9.0";
+    // jason needs 2.0.0-rc.8+, and every model depends on it.
+    protected String environmentVersion = "2.0.0";
     protected String userAgent = "onescript-openapi-generator";
     /** Minimum 1connector the generated transport is written against. */
     protected String connectorVersion = "2.3.3";
+    /** Serialises models to JSON from the &Сериализуемое annotations. */
+    protected String jasonVersion = "0.6.0";
+    /** Checks models against the constraint annotations. */
+    protected String validateVersion = "0.4.0";
 
     public OneScriptClientCodegen() {
         super();
@@ -172,6 +182,10 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
         cliOptions.add(new CliOption(USER_AGENT, "Значение заголовка User-Agent").defaultValue(userAgent));
         cliOptions.add(new CliOption(CONNECTOR_VERSION,
                 "Минимальная версия библиотеки 1connector").defaultValue(connectorVersion));
+        cliOptions.add(new CliOption(JASON_VERSION,
+                "Минимальная версия библиотеки jason").defaultValue(jasonVersion));
+        cliOptions.add(new CliOption(VALIDATE_VERSION,
+                "Минимальная версия библиотеки validate").defaultValue(validateVersion));
         cliOptions.add(CliOption.newBoolean(CodegenConstants.HIDE_GENERATION_TIMESTAMP,
                 CodegenConstants.HIDE_GENERATION_TIMESTAMP_DESC, true));
     }
@@ -203,6 +217,8 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
         environmentVersion = stringOption(ENVIRONMENT_VERSION, environmentVersion);
         userAgent = stringOption(USER_AGENT, userAgent);
         connectorVersion = stringOption(CONNECTOR_VERSION, connectorVersion);
+        jasonVersion = stringOption(JASON_VERSION, jasonVersion);
+        validateVersion = stringOption(VALIDATE_VERSION, validateVersion);
 
         additionalProperties.put(PACKAGE_NAME, packageName);
         additionalProperties.put(PACKAGE_VERSION, packageVersion);
@@ -212,6 +228,8 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
         additionalProperties.put(ENVIRONMENT_VERSION, environmentVersion);
         additionalProperties.put(USER_AGENT, userAgent);
         additionalProperties.put(CONNECTOR_VERSION, connectorVersion);
+        additionalProperties.put(JASON_VERSION, jasonVersion);
+        additionalProperties.put(VALIDATE_VERSION, validateVersion);
         additionalProperties.put("generatorName", getName());
 
         supportingFiles.add(new SupportingFile("packagedef.mustache", "", "packagedef"));
@@ -488,6 +506,7 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
                     property.name = property.name + "_" + count;
                 }
                 property.vendorExtensions.put("x-os-doc", buildPropertyDoc(property));
+                property.vendorExtensions.put("x-os-annotations", buildAnnotations(property));
             }
 
             model.vendorExtensions.put("x-os-doc",
@@ -637,6 +656,142 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
 
     private String asText(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    /** Formats known to validate's &Формат; anything else is left unannotated. */
+    private static final Set<String> KNOWN_FORMATS = new LinkedHashSet<>(Arrays.asList(
+            "email", "uuid", "uri", "date", "date-time", "ipv4"));
+
+    /**
+     * Renders the annotations that carry a property's contract.
+     *
+     * <p>Two libraries read them and they deliberately overlap: jason uses
+     * {@code &Сериализуемое} for the JSON name and {@code &Тип}/{@code &ДляКаждого} to
+     * deserialize into the right class, while validate uses {@code &Тип} plus the
+     * constraint annotations to check a value. Declaring the shape once is the point —
+     * a hand-written Заполнить/Данные pair would restate the same mapping in code and
+     * drift from it.
+     */
+    private List<String> buildAnnotations(CodegenProperty property) {
+        List<String> lines = new ArrayList<>();
+
+        // The spec's name, not the BSL one: toVarName may have had to sanitize it.
+        lines.add("&Сериализуемое(\"" + escapeQuotationMark(property.baseName) + "\")");
+
+        if (property.required) {
+            lines.add("&Заполнено");
+        }
+
+        lines.add("&Тип(\"" + escapeQuotationMark(property.dataType) + "\")");
+        appendValueConstraints(lines, property);
+
+        if (property.isArray && property.items != null) {
+            // &ДляКаждого switches the following annotations onto the elements.
+            lines.add("&ДляКаждого");
+            lines.add("&Тип(\"" + escapeQuotationMark(property.items.dataType) + "\")");
+            appendValueConstraints(lines, property.items);
+            if (isModel(property.items)) {
+                lines.add("&Валидно");
+            }
+        } else if (isModel(property)) {
+            lines.add("&Валидно");
+        }
+
+        return lines;
+    }
+
+    private void appendValueConstraints(List<String> lines, CodegenProperty property) {
+        // &Минимум/&Максимум compare the value itself — on a string that is a
+        // lexicographic comparison, so length limits have to go through &Размер.
+        if (property.isArray || property.isMap) {
+            appendSize(lines, property.minItems, property.maxItems);
+        } else if (property.isString) {
+            appendSize(lines, property.minLength, property.maxLength);
+        }
+
+        if (isNumeric(property)) {
+            if (property.minimum != null) {
+                lines.add("&Минимум(" + property.minimum + ")");
+            }
+            if (property.maximum != null) {
+                lines.add("&Максимум(" + property.maximum + ")");
+            }
+        }
+
+        if (property.pattern != null && !property.pattern.isEmpty()) {
+            lines.add("&Шаблон(\"" + escapeQuotationMark(stripPatternDelimiters(property.pattern)) + "\")");
+        }
+
+        if (property.dataFormat != null && KNOWN_FORMATS.contains(property.dataFormat)) {
+            lines.add("&Формат(\"" + property.dataFormat + "\")");
+        }
+
+        List<String> allowed = allowableValues(property);
+        if (!allowed.isEmpty()) {
+            StringBuilder oneOf = new StringBuilder("&ОдинИз(");
+            for (int index = 0; index < allowed.size(); index++) {
+                if (index > 0) {
+                    oneOf.append(", ");
+                }
+                oneOf.append("Значение = \"").append(escapeQuotationMark(allowed.get(index))).append("\"");
+            }
+            lines.add(oneOf.append(")").toString());
+        }
+    }
+
+    private void appendSize(List<String> lines, Integer minimum, Integer maximum) {
+        if (minimum == null && maximum == null) {
+            return;
+        }
+        List<String> parts = new ArrayList<>();
+        if (minimum != null) {
+            parts.add("Минимум = " + minimum);
+        }
+        if (maximum != null) {
+            parts.add("Максимум = " + maximum);
+        }
+        lines.add("&Размер(" + String.join(", ", parts) + ")");
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> allowableValues(CodegenProperty property) {
+        if (property.allowableValues == null) {
+            return Collections.emptyList();
+        }
+        Object values = property.allowableValues.get("values");
+        if (!(values instanceof List)) {
+            return Collections.emptyList();
+        }
+        List<String> result = new ArrayList<>();
+        for (Object value : (List<Object>) values) {
+            if (value != null) {
+                result.add(String.valueOf(value));
+            }
+        }
+        return result;
+    }
+
+    private boolean isNumeric(CodegenProperty property) {
+        return property.isInteger || property.isLong || property.isNumber
+                || property.isFloat || property.isDouble || property.isDecimal;
+    }
+
+    /** A property typed as another generated class, so &Валидно can recurse into it. */
+    private boolean isModel(CodegenProperty property) {
+        return property.complexType != null
+                && !languageSpecificPrimitives.contains(property.dataType);
+    }
+
+    /**
+     * validate anchors the pattern at both ends already, and OpenAPI patterns are bare
+     * ECMA regexes — but some specs still wrap them in slashes.
+     */
+    private String stripPatternDelimiters(String pattern) {
+        String result = pattern.trim();
+        if (result.length() > 1 && result.startsWith("/") && result.lastIndexOf('/') > 0) {
+            result = result.substring(1, result.lastIndexOf('/'));
+        }
+        return result;
     }
 
     private List<String> buildPropertyDoc(CodegenProperty property) {

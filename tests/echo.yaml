@@ -76,6 +76,7 @@ components:
     Pet:
       type: object
       description: Питомец.
+      required: [id, name]
       properties:
         id: {type: string, description: Идентификатор}
         name: {type: string, description: Кличка}
