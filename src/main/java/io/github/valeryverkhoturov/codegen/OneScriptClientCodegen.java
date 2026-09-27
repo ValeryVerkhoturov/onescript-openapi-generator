@@ -1,6 +1,7 @@
 package io.github.valeryverkhoturov.codegen;
 
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.media.Schema;
 
 import org.openapitools.codegen.CliOption;
 import org.openapitools.codegen.CodegenConfig;
@@ -26,9 +27,12 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -36,8 +40,9 @@ import java.util.TreeMap;
  *
  * <p>Output is a ready-to-build opm package: {@code packagedef} + {@code lib.config}
  * describing every generated class, sources under {@code src/}, and a small runtime
- * (configuration, HTTP transport, response type, secret-string wrapper)
- * that depends on nothing beyond the OneScript standard library.
+ * (configuration, HTTP transport, response type, secret-string wrapper) built on
+ * <a href="https://github.com/vbondarevsky/1connector">1connector</a>, which is
+ * declared as the package's only dependency.
  *
  * <p>Two OneScript traits shape most of the decisions here:
  * <ul>
@@ -56,6 +61,8 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
     public static final String PACKAGE_AUTHOR_EMAIL = "packageAuthorEmail";
     public static final String ENVIRONMENT_VERSION = "environmentVersion";
     public static final String USER_AGENT = "userAgent";
+    public static final String CONNECTOR_VERSION = "connectorVersion";
+    public static final String JASON_VERSION = "jasonVersion";
 
     /** Directory holding API and runtime classes, relative to the package root. */
     private static final String CLASS_DIR = "src" + File.separator + "Классы";
@@ -67,8 +74,13 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
     protected String packageDescription = "Клиент API, сгенерированный из спецификации OpenAPI";
     protected String packageAuthor = "";
     protected String packageAuthorEmail = "";
-    protected String environmentVersion = "1.9.0";
+    // jason needs 2.0.0-rc.8+, and every model depends on it.
+    protected String environmentVersion = "2.0.0";
     protected String userAgent = "onescript-openapi-generator";
+    /** Minimum 1connector the generated transport is written against. */
+    protected String connectorVersion = "2.3.3";
+    /** Serialises models to JSON from the &Сериализуемое annotations. */
+    protected String jasonVersion = "0.6.0";
 
     public OneScriptClientCodegen() {
         super();
@@ -166,6 +178,10 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
         cliOptions.add(new CliOption(PACKAGE_AUTHOR_EMAIL, "Адрес автора").defaultValue(packageAuthorEmail));
         cliOptions.add(new CliOption(ENVIRONMENT_VERSION, "Минимальная версия OneScript").defaultValue(environmentVersion));
         cliOptions.add(new CliOption(USER_AGENT, "Значение заголовка User-Agent").defaultValue(userAgent));
+        cliOptions.add(new CliOption(CONNECTOR_VERSION,
+                "Минимальная версия библиотеки 1connector").defaultValue(connectorVersion));
+        cliOptions.add(new CliOption(JASON_VERSION,
+                "Минимальная версия библиотеки jason").defaultValue(jasonVersion));
         cliOptions.add(CliOption.newBoolean(CodegenConstants.HIDE_GENERATION_TIMESTAMP,
                 CodegenConstants.HIDE_GENERATION_TIMESTAMP_DESC, true));
     }
@@ -196,6 +212,8 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
         packageAuthorEmail = stringOption(PACKAGE_AUTHOR_EMAIL, packageAuthorEmail);
         environmentVersion = stringOption(ENVIRONMENT_VERSION, environmentVersion);
         userAgent = stringOption(USER_AGENT, userAgent);
+        connectorVersion = stringOption(CONNECTOR_VERSION, connectorVersion);
+        jasonVersion = stringOption(JASON_VERSION, jasonVersion);
 
         additionalProperties.put(PACKAGE_NAME, packageName);
         additionalProperties.put(PACKAGE_VERSION, packageVersion);
@@ -204,6 +222,8 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
         putIfPresent(PACKAGE_AUTHOR_EMAIL, packageAuthorEmail);
         additionalProperties.put(ENVIRONMENT_VERSION, environmentVersion);
         additionalProperties.put(USER_AGENT, userAgent);
+        additionalProperties.put(CONNECTOR_VERSION, connectorVersion);
+        additionalProperties.put(JASON_VERSION, jasonVersion);
         additionalProperties.put("generatorName", getName());
 
         supportingFiles.add(new SupportingFile("packagedef.mustache", "", "packagedef"));
@@ -241,6 +261,27 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
     @Override
     public String modelFileFolder() {
         return outputFolder + File.separator + MODEL_DIR;
+    }
+
+    /**
+     * Resolves a schema to the OneScript type that actually exists.
+     *
+     * <p>Without this, a {@code $ref} yields the bare schema name while the class it
+     * generates carries {@code modelNamePrefix} — so an annotation like
+     * {@code &Тип("AdvertSettings")} would name a class that was never emitted, and
+     * both jason's deserializer and validate's type check would fail on it at runtime.
+     */
+    @Override
+    public String getSchemaType(Schema schema) {
+        String openAPIType = super.getSchemaType(schema);
+
+        if (typeMapping.containsKey(openAPIType)) {
+            return typeMapping.get(openAPIType);
+        }
+        if (languageSpecificPrimitives.contains(openAPIType)) {
+            return openAPIType;
+        }
+        return toModelName(openAPIType);
     }
 
     @Override
@@ -480,6 +521,7 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
                     property.name = property.name + "_" + count;
                 }
                 property.vendorExtensions.put("x-os-doc", buildPropertyDoc(property));
+                property.vendorExtensions.put("x-os-annotations", buildAnnotations(property));
             }
 
             model.vendorExtensions.put("x-os-doc",
@@ -629,6 +671,31 @@ public class OneScriptClientCodegen extends DefaultCodegen implements CodegenCon
 
     private String asText(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    /**
+     * Renders the annotations jason reads: the JSON name from {@code &Сериализуемое},
+     * and the target class from {@code &Тип} / {@code &ДляКаждого} so nested models and
+     * arrays of models deserialize as themselves rather than as Структура.
+     *
+     * <p>Those two annotations are defined by validate, which jason depends on and
+     * loads transitively — the generated package needs neither the import nor the
+     * dependency of its own.
+     */
+    private List<String> buildAnnotations(CodegenProperty property) {
+        List<String> lines = new ArrayList<>();
+
+        // The spec's name, not the BSL one: toVarName may have had to sanitize it.
+        lines.add("&Сериализуемое(\"" + escapeQuotationMark(property.baseName) + "\")");
+        lines.add("&Тип(\"" + escapeQuotationMark(property.dataType) + "\")");
+
+        if (property.isArray && property.items != null) {
+            // &ДляКаждого switches the following annotations onto the elements.
+            lines.add("&ДляКаждого");
+            lines.add("&Тип(\"" + escapeQuotationMark(property.items.dataType) + "\")");
+        }
+
+        return lines;
     }
 
     private List<String> buildPropertyDoc(CodegenProperty property) {

@@ -78,6 +78,12 @@ class OneScriptClientCodegenTest {
     }
 
     @Test
+    void declaresTheConnectorDependencyVersion() {
+        codegen.processOpts();
+        assertEquals("2.3.3", codegen.additionalProperties().get("connectorVersion"));
+    }
+
+    @Test
     void putsApisAndModelsInSeparateFolders() {
         assertTrue(codegen.apiFileFolder().replace('\\', '/').endsWith("src/Классы"));
         assertTrue(codegen.modelFileFolder().replace('\\', '/').endsWith("src/Модели"));

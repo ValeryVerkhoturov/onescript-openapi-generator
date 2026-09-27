@@ -56,6 +56,14 @@ paths:
         description: Значение, подставляемое в путь
       responses:
         '200': {description: Успешно}
+  /flaky:
+    get:
+      operationId: echoFlaky
+      tags: [Эхо]
+      summary: Ответить 503 дважды, затем 200
+      responses:
+        '200': {description: Успешно}
+        '503': {description: Сервис недоступен}
   /fail:
     get:
       operationId: echoFail
@@ -68,6 +76,7 @@ components:
     Pet:
       type: object
       description: Питомец.
+      required: [id, name]
       properties:
         id: {type: string, description: Идентификатор}
         name: {type: string, description: Кличка}
