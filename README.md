@@ -33,9 +33,9 @@ src/Модели/
 - [1connector](https://github.com/vbondarevsky/1connector) — транспорт: сборка и
   кодирование строки запроса, разбор ответа, повторы, прокси и SSL.
 - [jason](https://github.com/nixel2007/jason) — сериализация и разбор моделей по
-  аннотациям.
-- [validate](https://github.com/nixel2007/validate) — проверка моделей по
-  аннотациям-ограничениям.
+  аннотациям. Он же подтягивает [validate](https://github.com/nixel2007/validate):
+  там определены аннотации `&Тип` и `&ДляКаждого`, которые читает jason. Сам
+  валидатор не используется — см. «Ограничения».
 
 ## Сборка
 
@@ -74,7 +74,6 @@ java -cp "onescript-openapi-generator.jar:openapi-generator-cli.jar" \
 | `userAgent` | `onescript-openapi-generator` | значение заголовка `User-Agent` |
 | `connectorVersion` | `2.3.3` | минимальная версия 1connector в `packagedef` |
 | `jasonVersion` | `0.6.0` | минимальная версия jason |
-| `validateVersion` | `0.4.0` | минимальная версия validate |
 
 ## Проверка результата
 
@@ -139,6 +138,11 @@ OSCRIPT=/путь/к/oscript scripts/check.sh ./out
 повторная генерация даёт побайтово тот же файл.
 
 ## Ограничения
+
+- Значения не проверяются по ограничениям спецификации: `required`, `enum`,
+  `pattern`, `minimum`/`maximum` и прочее в сгенерированный код не переносятся.
+  На сериализацию и разбор это не влияет; если проверка нужна, её делает
+  вызывающий код.
 
 - Тела запросов сериализуются в JSON. `multipart/form-data` генератор не
   использует, хотя 1connector это умеет — при необходимости передайте

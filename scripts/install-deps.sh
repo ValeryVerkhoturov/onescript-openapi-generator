@@ -5,7 +5,9 @@ set -euo pipefail
 #
 #   1connector — the HTTP transport
 #   jason      — serialises models to JSON from their annotations
-#   validate   — checks models against their constraint annotations
+#
+# jason depends on validate and opm installs it alongside: the &Тип and
+# &ДляКаждого annotations jason reads are defined there.
 #
 # Needed for compile-checking, not just at runtime: ТранспортHTTP.os and every
 # model open with `#Использовать`, so `oscript -check` has to resolve them too.
@@ -15,7 +17,6 @@ set -euo pipefail
 OSCRIPT="${OSCRIPT:-oscript}"
 CONNECTOR_VERSION="${CONNECTOR_VERSION:-2.3.3}"
 JASON_VERSION="${JASON_VERSION:-0.6.0}"
-VALIDATE_VERSION="${VALIDATE_VERSION:-0.4.0}"
 
 if ! command -v "${OSCRIPT}" >/dev/null 2>&1 && [[ ! -x "${OSCRIPT}" ]]; then
   echo "oscript not found — set OSCRIPT=/path/to/oscript" >&2
@@ -33,12 +34,9 @@ install_package() {
     return 0
   fi
 
-  # jason pulls validate in as its own dependency, but both are declared in the
-  # generated packagedef, so both are installed explicitly at known versions.
   "${OSCRIPT}" "${OPM}" install "${name}@${version}"
   echo "  ✓ ${name} ${version} installed"
 }
 
 install_package 1connector "${CONNECTOR_VERSION}"
-install_package validate "${VALIDATE_VERSION}"
 install_package jason "${JASON_VERSION}"
